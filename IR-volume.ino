@@ -21,9 +21,10 @@ template<class T> inline Print &operator <<(Print &obj, T arg) { obj.print(arg);
 double volume = DEFAULTVOLUME;
 int volumeAtMute = DEFAULTVOLUME;
 long Previous[2] = {0,0};
-long timeHoldStarted = 0;
-long buttonPressTime[2] = {0,0};
-long timeHeld = 0;
+unsigned long timeHoldStarted = 0;
+unsigned long buttonPressTime[2] = {0,0};
+unsigned long timeHeld = 0;
+unsigned long timeOfMute = 0;
 boolean mute = 0;
 boolean keyHeld = 0;
 IRrecv IR(IRPIN);
@@ -115,7 +116,7 @@ void loop()
 		// Serial.println(decoder.value, HEX);
 		
 		
-		if(( Previous[0] == decoder.value || Previous[1] == decoder.value ) && ( buttonPressTime[0] - buttonPressTime[1] < HOLDDELAY )	)	//same key hit twice in a row and interval between same key presses is less than X milliseconds = key is held
+		if( ( Previous[0] == decoder.value || Previous[1] == decoder.value ) && ( buttonPressTime[0] - buttonPressTime[1] < HOLDDELAY )	)	//same key hit twice in a row and interval between same key presses is less than X milliseconds = key is held
 		{
 			if(keyHeld == 0)
 			{
@@ -137,10 +138,16 @@ void loop()
 		{
 			if(decoder.value == MUTE)
 			{
-				volumeAtMute = volume;
-				mute = 1;
-				volume = -78;
-				sendVolume();
+				if(millis() - timeOfMute > HOLDDELAY)
+				{
+					timeOfMute = millis();
+					volumeAtMute = volume;
+					mute = 1;
+					volume = -78;
+					Serial << "Entering mute state                               ";
+					sendVolume();
+				}
+				
 			}
 			else if(decoder.value == UP)
 			{
@@ -154,6 +161,7 @@ void loop()
 					{
 						volume = 0;
 					}
+					Serial << "Volume UP   detected                              ";
 					sendVolume();
 				}	
 			}
@@ -169,6 +177,7 @@ void loop()
 					{
 						volume = -79;
 					}
+					Serial << "Volume DOWN detected                              ";
 					sendVolume();
 				}
 			}
@@ -180,17 +189,24 @@ void loop()
 		}
 		else	// muted 
 		{
-			if(decoder.value == MUTE); //if the mute button is used to exit the mute state, return to the same volume as before muting
+			if( decoder.value == MUTE) //if the mute button is used to exit the mute state, return to the same volume as before muting
 			{
-				volume = volumeAtMute;
-				sendVolume();
-			}
-			if(decoder.value == UP || decoder.value == DOWN || decoder.value == POWER)	//if any other key is used to exit mute, revert to the default volume
+				if(millis() - timeOfMute > HOLDDELAY)
+				{
+					mute = 0;
+					timeOfMute = millis();
+					volume = volumeAtMute;
+					Serial << "Exiting mute state using MUTE  key                ";
+					sendVolume();
+				}
+			}	
+			else if(decoder.value == UP || decoder.value == DOWN || decoder.value == POWER)	//if any other key is used to exit mute, revert to the default volume
 			{
+				mute = 0;
 				volume = DEFAULTVOLUME;
+				Serial << "Exiting mute state using other key; default volume";
 				sendVolume();
 			}
-			mute = 0;
 		}
 		IR.resume();
 		//Serial << "Volume: " << (int)volume << " increment: " << increment() << "\n";
